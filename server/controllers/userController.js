@@ -1,6 +1,6 @@
 import sql from "../config/db.js";
 
-export const getUserCreations = async () => {
+export const getUserCreations = async (req,res) => {
   try {
     const { userId } = req.auth();
     const creations =
@@ -12,7 +12,7 @@ export const getUserCreations = async () => {
   }
 };
 
-export const getPublishedCreations = async () => {
+export const getPublishedCreations = async (req,res) => {
   try {
     const creations =
       await sql`SELECT * FROM  creations WHERE publish = true ORDER BY created_at DESC`;
@@ -23,7 +23,7 @@ export const getPublishedCreations = async () => {
   }
 };
 
-export const toggleLikeCreations = async () => {
+export const toggleLikeCreations = async (req,res) => {
   try {
     const { userId } = req.auth();
     const { id } = req.body;
@@ -47,7 +47,7 @@ export const toggleLikeCreations = async () => {
       message = "Creation Liked";
     }
 
-    const formattedArray = `{${updatedLikes.json(",")}}`;
+    const formattedArray = `{${updatedLikes.join(",")}}`;
 
     await sql`UPDATE creations SET likes = ${formattedArray}::text[] WHERE id = ${id}`;
 

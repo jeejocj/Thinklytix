@@ -4,7 +4,8 @@ import { clerkClient } from "@clerk/express";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-const pdf = (await import("pdf-parse")).default;
+import pdf from "pdf-parse-fixed";
+
 
 // Gemini api to generate reponse for the prompts
 const AI = new OpenAI({
@@ -15,7 +16,7 @@ const AI = new OpenAI({
 export const generateArticle = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { prompt } = req.body;
+    const { prompt,length } = req.body;
     const plan = req.plan;
     const free_usage = req.free_usage;
 
@@ -162,7 +163,7 @@ export const generateImage = async (req, res) => {
 export const removeImageBackground = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { image } = req.file;
+    const image  = req.file;
     const plan = req.plan;
 
     if (plan !== "premium") {
@@ -198,7 +199,7 @@ export const removeImageObject = async (req, res) => {
   try {
     const { userId } = req.auth();
     const { object } = req.body;
-    const { image } = req.file;
+    const  image  = req.file;
     const plan = req.plan;
 
     if (plan !== "premium") {
@@ -228,6 +229,8 @@ export const removeImageObject = async (req, res) => {
   }
 };
 
+
+
 export const resumeReview = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -237,45 +240,55 @@ export const resumeReview = async (req, res) => {
     if (plan !== "premium") {
       return res.json({
         success: false,
-        message: "This feature is only availale for Premium subscriptions.",
+        message: "This feature is only available for Premium subscriptions.",
       });
     }
 
     if (resume.size > 5 * 1024 * 1024) {
-      res.json({
+      return res.json({
         success: false,
-        message: "Resume file size exceeds. allowed size (5MB).",
+        message: "Resume file size exceeds allowed size (5MB).",
       });
     }
 
     const dataBuffer = fs.readFileSync(resume.path);
-    const pdfData = await pdf(dataBuffer);
 
-    const prompt = `Review the following resume and provide constructive feedback on its strengths, weakness, and areas for improvement. Resume content : \n\n${pdfData.text}`;
+    const pdfData = await pdf(dataBuffer); // THIS WORKS
+    const resumeText = pdfData.text;
+
+
+    const promptForAI = `
+      Review the following resume and provide constructive feedback.
+      Resume content:
+      ${resumeText}
+    `;
+   const prompt =  'review the uploaded resume'
 
     const response = await AI.chat.completions.create({
       model: "gemini-2.0-flash",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+      messages: [{ role: "user", content: promptForAI }],
       temperature: 0.7,
       max_tokens: 1000,
     });
 
     const content = response.choices[0].message.content;
 
-    await sql`INSERT INTO creations (user_id, prompt, content, type)
-    VALUES (${userId},'Review the uploaded resume, ${content}, 'resume-review')`;
+    // Save to DB
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${prompt}, ${content}, 'resume-review')
+    `;
 
-    res.json({
+    return res.json({
       success: true,
-      content: content,
+      content,
     });
+
   } catch (error) {
-    console.log(error.message);
-    res.json({ success: false, message: error.message });
+    console.error(error);
+    return res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
